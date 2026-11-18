@@ -29,7 +29,7 @@ int main(void)
         }
 
         if (cmdline[0] != '\0')
-            add_history(cmdline);
+            shell_add_history(cmdline);
 
         arglist = tokenize(cmdline);
         if (arglist != NULL) {
