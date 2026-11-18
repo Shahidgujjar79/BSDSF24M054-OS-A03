@@ -17,3 +17,9 @@ jobs:
         run: make clean && make
       - name: Smoke test built-in commands
         run: printf 'help\nexit\n' | ./bin/myshell
+      - name: Upload compiled shell
+        uses: actions/upload-artifact@v4
+        with:
+          name: myshell-linux
+          path: bin/myshell
+          if-no-files-found: error
