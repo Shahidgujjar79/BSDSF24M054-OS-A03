@@ -1,13 +1,78 @@
 #include "shell.h"
 #include <fcntl.h>
 
+#define MAX_JOBS 64
+
+typedef struct {
+    pid_t pid;
+    char command[256];
+} Job;
+
+static Job job_list[MAX_JOBS];
+static int job_count;
+
+static void reap_jobs(void)
+{
+    int i = 0;
+    int status;
+    pid_t result;
+
+    while (i < job_count) {
+        result = waitpid(job_list[i].pid, &status, WNOHANG);
+        if (result == job_list[i].pid) {
+            printf("[%d] Done  %s\n", (int)job_list[i].pid, job_list[i].command);
+            job_list[i] = job_list[job_count - 1];
+            job_count--;
+        } else {
+            i++;
+        }
+    }
+}
+
+static void show_jobs(void)
+{
+    int i;
+
+    reap_jobs();
+    for (i = 0; i < job_count; i++)
+        printf("[%d] Running  %s\n", (int)job_list[i].pid, job_list[i].command);
+    if (job_count == 0)
+        puts("No background jobs.");
+}
+
+static void remember_job(pid_t pid, char **args)
+{
+    int i;
+    size_t used = 0;
+
+    if (job_count == MAX_JOBS) {
+        fprintf(stderr, "myshell: job table is full\n");
+        return;
+    }
+
+    job_list[job_count].pid = pid;
+    job_list[job_count].command[0] = '\0';
+
+    for (i = 0; args[i] != NULL && used < sizeof(job_list[job_count].command) - 1; i++) {
+        int written = snprintf(job_list[job_count].command + used,
+                               sizeof(job_list[job_count].command) - used,
+                               "%s%s", i ? " " : "", args[i]);
+        if (written < 0)
+            break;
+        used += (size_t)written;
+    }
+    job_count++;
+    printf("[%d] %d\n", job_count, (int)pid);
+}
+
 void print_help(void)
 {
-    printf("Built-in commands:\n");
-    printf("  cd [directory]  Change the current working directory\n");
-    printf("  exit            Exit the shell\n");
-    printf("  help            Show this help message\n");
-    printf("  jobs            Show background jobs (added in a later feature)\n");
+    puts("Built-in commands:");
+    puts("  cd [directory]  Change the current working directory");
+    puts("  exit            Exit the shell");
+    puts("  help            Show this help message");
+    puts("  jobs            List background jobs");
+    puts("  history         Show recent commands");
 }
 
 static int run_builtin(char **args, int *handled)
@@ -23,21 +88,18 @@ static int run_builtin(char **args, int *handled)
     }
 
     if (strcmp(args[0], "jobs") == 0) {
-        puts("No job-control support has been added yet.");
+        show_jobs();
         return 0;
     }
 
     if (strcmp(args[0], "cd") == 0) {
         const char *directory = args[1];
-
         if (directory == NULL)
             directory = getenv("HOME");
-
-        if (directory == NULL) {
+        if (directory == NULL)
             fprintf(stderr, "cd: HOME is not set\n");
-        } else if (chdir(directory) != 0) {
+        else if (chdir(directory) != 0)
             perror("cd");
-        }
         return 0;
     }
 
@@ -59,29 +121,22 @@ static int apply_redirection(char **args)
                 fprintf(stderr, "myshell: missing file for redirection\n");
                 return -1;
             }
-
-            if (input)
-                fd = open(filename, O_RDONLY);
-            else
-                fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-
+            fd = input ? open(filename, O_RDONLY)
+                       : open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
             if (fd < 0) {
                 perror(filename);
                 return -1;
             }
-
             if (dup2(fd, input ? STDIN_FILENO : STDOUT_FILENO) < 0) {
                 perror("dup2");
                 close(fd);
                 return -1;
             }
-
             close(fd);
             args[i] = NULL;
             return 0;
         }
     }
-
     return 0;
 }
 
@@ -89,10 +144,8 @@ static void run_child(char **args)
 {
     if (apply_redirection(args) < 0)
         _exit(1);
-
     if (args[0] == NULL)
         _exit(0);
-
     execvp(args[0], args);
     perror(args[0]);
     _exit(127);
@@ -108,40 +161,38 @@ static void wait_for(pid_t child)
     }
 }
 
-int execute(char **arglist)
+static int execute_one(char **args, int background)
 {
     int handled;
     int i;
     int pipe_index = -1;
-    int builtin_result;
     pid_t child;
 
-    for (i = 0; arglist[i] != NULL; i++) {
-        if (strcmp(arglist[i], "|") == 0) {
+    if (args[0] == NULL)
+        return 0;
+
+    for (i = 0; args[i] != NULL; i++) {
+        if (strcmp(args[i], "|") == 0) {
             pipe_index = i;
             break;
         }
     }
 
-    if (pipe_index < 0 &&
-        (strcmp(arglist[0], "<") != 0) &&
-        (strcmp(arglist[0], ">") != 0)) {
-        builtin_result = run_builtin(arglist, &handled);
+    if (pipe_index < 0) {
+        int result = run_builtin(args, &handled);
         if (handled)
-            return builtin_result;
+            return result;
     }
 
     if (pipe_index >= 0) {
         int descriptors[2];
-        pid_t left_child;
-        pid_t right_child;
+        pid_t left_child, right_child;
 
-        if (arglist[pipe_index + 1] == NULL) {
+        if (args[pipe_index + 1] == NULL) {
             fprintf(stderr, "myshell: missing command after pipe\n");
             return 0;
         }
-
-        arglist[pipe_index] = NULL;
+        args[pipe_index] = NULL;
         if (pipe(descriptors) < 0) {
             perror("pipe");
             return 0;
@@ -152,7 +203,7 @@ int execute(char **arglist)
             close(descriptors[0]);
             dup2(descriptors[1], STDOUT_FILENO);
             close(descriptors[1]);
-            run_child(arglist);
+            run_child(args);
         }
         if (left_child < 0) {
             perror("fork");
@@ -166,7 +217,7 @@ int execute(char **arglist)
             close(descriptors[1]);
             dup2(descriptors[0], STDIN_FILENO);
             close(descriptors[0]);
-            run_child(&arglist[pipe_index + 1]);
+            run_child(&args[pipe_index + 1]);
         }
         close(descriptors[0]);
         close(descriptors[1]);
@@ -184,10 +235,41 @@ int execute(char **arglist)
         perror("fork");
         return 0;
     }
-
     if (child == 0)
-        run_child(arglist);
+        run_child(args);
 
-    wait_for(child);
+    if (background)
+        remember_job(child, args);
+    else
+        wait_for(child);
+
     return 0;
+}
+
+int execute(char **arglist)
+{
+    int start = 0;
+    int i;
+    int should_exit = 0;
+
+    reap_jobs();
+
+    for (i = 0; ; i++) {
+        if (arglist[i] == NULL || strcmp(arglist[i], ";") == 0 ||
+            strcmp(arglist[i], "&") == 0) {
+            int background = (arglist[i] != NULL &&
+                              strcmp(arglist[i], "&") == 0);
+            char *separator = arglist[i];
+
+            arglist[i] = NULL;
+            if (i > start)
+                should_exit = execute_one(&arglist[start], background);
+            if (separator == NULL || should_exit)
+                break;
+            arglist[i] = separator;
+            start = i + 1;
+        }
+    }
+
+    return should_exit;
 }
