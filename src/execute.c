@@ -246,6 +246,73 @@ static int execute_one(char **args, int background)
     return 0;
 }
 
+
+static int condition_succeeded(char **condition)
+{
+    pid_t child;
+    int status;
+
+    child = fork();
+    if (child < 0) {
+        perror("fork");
+        return 0;
+    }
+    if (child == 0) {
+        execvp(condition[0], condition);
+        perror(condition[0]);
+        _exit(127);
+    }
+
+    while (waitpid(child, &status, 0) < 0) {
+        if (errno != EINTR) {
+            perror("waitpid");
+            return 0;
+        }
+    }
+
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
+static int execute_if(char **args)
+{
+    int then_index = -1;
+    int else_index = -1;
+    int fi_index = -1;
+    int i;
+    int condition_ok;
+
+    for (i = 1; args[i] != NULL; i++) {
+        if (strcmp(args[i], "then") == 0 && then_index < 0)
+            then_index = i;
+        else if (strcmp(args[i], "else") == 0 && then_index >= 0 && else_index < 0)
+            else_index = i;
+        else if (strcmp(args[i], "fi") == 0) {
+            fi_index = i;
+            break;
+        }
+    }
+
+    if (then_index < 2 || fi_index < 0 ||
+        (else_index >= 0 && else_index > fi_index)) {
+        fprintf(stderr, "myshell: syntax: if CONDITION then COMMAND [else COMMAND] fi\\n");
+        return 0;
+    }
+
+    args[then_index] = NULL;
+    condition_ok = condition_succeeded(&args[1]);
+
+    if (else_index >= 0)
+        args[else_index] = NULL;
+    args[fi_index] = NULL;
+
+    if (condition_ok)
+        return execute(&args[then_index + 1]);
+    if (else_index >= 0)
+        return execute(&args[else_index + 1]);
+
+    return 0;
+}
+
 int execute(char **arglist)
 {
     int start = 0;
@@ -253,6 +320,9 @@ int execute(char **arglist)
     int should_exit = 0;
 
     reap_jobs();
+
+    if (arglist[0] != NULL && strcmp(arglist[0], "if") == 0)
+        return execute_if(arglist);
 
     for (i = 0; ; i++) {
         if (arglist[i] == NULL || strcmp(arglist[i], ";") == 0 ||
