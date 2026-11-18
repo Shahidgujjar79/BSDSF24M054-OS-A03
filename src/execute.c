@@ -1,5 +1,7 @@
 #include "shell.h"
-#include <fcntl.h>\n\nextern char **environ;
+#include <fcntl.h>
+
+extern char **environ;
 
 #define MAX_JOBS 64
 
