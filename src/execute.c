@@ -1,5 +1,5 @@
 #include "shell.h"
-#include <fcntl.h>
+#include <fcntl.h>\n\nextern char **environ;
 
 #define MAX_JOBS 64
 
@@ -72,7 +72,7 @@ void print_help(void)
     puts("  exit            Exit the shell");
     puts("  help            Show this help message");
     puts("  jobs            List background jobs");
-    puts("  history         Show recent commands");
+    puts("  history         Show recent commands");\n    puts("  set [NAME VALUE] Show or assign shell variables");
 }
 
 static int run_builtin(char **args, int *handled)

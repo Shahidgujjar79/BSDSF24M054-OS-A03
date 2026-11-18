@@ -142,3 +142,70 @@ void free_args(char **arglist)
 
     free(arglist);
 }
+
+char *expand_variables(const char *input)
+{
+    size_t capacity = 1024;
+    size_t used = 0;
+    char *output = malloc(capacity);
+    size_t i = 0;
+
+    if (output == NULL)
+        return NULL;
+
+    while (input[i] != '\0') {
+        if (input[i] == '$') {
+            char name[256];
+            size_t n = 0;
+            const char *value;
+            int braced = (input[i + 1] == '{');
+
+            i += braced ? 2 : 1;
+            while (input[i] != '\0' &&
+                   (braced ? input[i] != '}' :
+                    (input[i] == '_' || (input[i] >= 'A' && input[i] <= 'Z') ||
+                     (input[i] >= 'a' && input[i] <= 'z') ||
+                     (input[i] >= '0' && input[i] <= '9')))) {
+                if (n + 1 < sizeof(name))
+                    name[n++] = input[i];
+                i++;
+            }
+            name[n] = '\0';
+            if (braced && input[i] == '}')
+                i++;
+
+            value = n ? getenv(name) : NULL;
+            if (value == NULL)
+                value = "";
+
+            while (*value != '\0') {
+                if (used + 2 > capacity) {
+                    char *grown;
+                    capacity *= 2;
+                    grown = realloc(output, capacity);
+                    if (grown == NULL) {
+                        free(output);
+                        return NULL;
+                    }
+                    output = grown;
+                }
+                output[used++] = *value++;
+            }
+        } else {
+            if (used + 2 > capacity) {
+                char *grown;
+                capacity *= 2;
+                grown = realloc(output, capacity);
+                if (grown == NULL) {
+                    free(output);
+                    return NULL;
+                }
+                output = grown;
+            }
+            output[used++] = input[i++];
+        }
+    }
+
+    output[used] = '\0';
+    return output;
+}
