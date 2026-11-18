@@ -1,6 +1,8 @@
 #include "shell.h"
 #include <fcntl.h>
 
+extern char **environ;
+
 #define MAX_JOBS 64
 
 typedef struct {
@@ -72,12 +74,40 @@ void print_help(void)
     puts("  exit            Exit the shell");
     puts("  help            Show this help message");
     puts("  jobs            List background jobs");
-    puts("  history         Show recent commands");
+    puts("  history         Show recent commands");\n    puts("  set [NAME VALUE] Show or assign shell variables");
 }
 
 static int run_builtin(char **args, int *handled)
 {
+    char *equals;
+
     *handled = 1;
+
+    equals = strchr(args[0], '=');
+    if (equals != NULL && equals != args[0]) {
+        *equals = '\0';
+        if (setenv(args[0], equals + 1, 1) != 0)
+            perror("setenv");
+        return 0;
+    }
+
+    if (strcmp(args[0], "set") == 0) {
+        if (args[1] == NULL) {
+            char **entry;
+            for (entry = environ; *entry != NULL; entry++)
+                puts(*entry);
+        } else if (args[2] != NULL) {
+            if (setenv(args[1], args[2], 1) != 0)
+                perror("setenv");
+        } else {
+            const char *value = getenv(args[1]);
+            if (value != NULL)
+                printf("%s=%s\n", args[1], value);
+            else
+                printf("%s is not set\n", args[1]);
+        }
+        return 0;
+    }
 
     if (strcmp(args[0], "exit") == 0)
         return 1;
