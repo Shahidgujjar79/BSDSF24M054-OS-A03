@@ -22,6 +22,5 @@ void print_help(void);
 void shell_add_history(const char *command);
 void show_history(void);
 char *get_history_command(int number);
-char *expand_variables(const char *input);
 
 #endif

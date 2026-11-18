@@ -31,16 +31,6 @@ int main(void)
         if (cmdline[0] != '\0')
             shell_add_history(cmdline);
 
-        {
-            char *expanded = expand_variables(cmdline);
-            if (expanded == NULL) {
-                free(cmdline);
-                continue;
-            }
-            free(cmdline);
-            cmdline = expanded;
-        }
-
         arglist = tokenize(cmdline);
         if (arglist != NULL) {
             if (strcmp(arglist[0], "history") == 0)
