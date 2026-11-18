@@ -1,31 +1,50 @@
 #include "shell.h"
+#include <readline/readline.h>
+#include <readline/history.h>
 
 static char *history[HISTORY_SIZE];
 static int history_count;
 static int history_next;
 
-char *read_cmd(const char *prompt, FILE *fp)
+static const char *commands[] = {
+    "cd", "exit", "help", "jobs", "history", NULL
+};
+
+static char *command_generator(const char *text, int state)
 {
-    char *line = NULL;
-    size_t capacity = 0;
-    ssize_t length;
+    static int index;
+    size_t length = strlen(text);
 
-    printf("%s", prompt);
-    fflush(stdout);
+    if (state == 0)
+        index = 0;
 
-    length = getline(&line, &capacity, fp);
-    if (length < 0) {
-        free(line);
-        return NULL;
+    while (commands[index] != NULL) {
+        const char *name = commands[index++];
+        if (strncmp(name, text, length) == 0)
+            return strdup(name);
     }
 
-    if (length > 0 && line[length - 1] == '\n')
-        line[length - 1] = '\0';
-
-    return line;
+    return NULL;
 }
 
-void add_history(const char *command)
+static char **shell_completion(const char *text, int start, int end)
+{
+    (void)end;
+
+    if (start == 0)
+        return rl_completion_matches(text, command_generator);
+
+    return NULL;
+}
+
+char *read_cmd(const char *prompt, FILE *fp)
+{
+    (void)fp;
+    rl_attempted_completion_function = shell_completion;
+    return readline(prompt);
+}
+
+void shell_add_history(const char *command)
 {
     char *copy = strdup(command);
 
