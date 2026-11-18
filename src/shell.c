@@ -53,6 +53,7 @@ void shell_add_history(const char *command)
         return;
     }
 
+    add_history(command);
     free(history[history_next]);
     history[history_next] = copy;
     history_next = (history_next + 1) % HISTORY_SIZE;
