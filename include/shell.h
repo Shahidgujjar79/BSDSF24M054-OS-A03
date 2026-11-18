@@ -2,8 +2,8 @@
 #define SHELL_H
 
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -11,12 +11,12 @@
 
 #define MAX_LEN 512
 #define MAXARGS 10
-#define ARGLEN 30
 #define PROMPT "FCIT> "
 
-// Function prototypes
-char* read_cmd(char* prompt, FILE* fp);
-char** tokenize(char* cmdline);
-int execute(char** arglist);
+char *read_cmd(const char *prompt, FILE *fp);
+char **tokenize(char *cmdline);
+void free_args(char **arglist);
+int execute(char **arglist);
+void print_help(void);
 
-#endif // SHELL_H
+#endif

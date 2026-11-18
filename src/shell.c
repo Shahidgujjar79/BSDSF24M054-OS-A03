@@ -1,62 +1,79 @@
 #include "shell.h"
 
-char* read_cmd(char* prompt, FILE* fp) {
+char *read_cmd(const char *prompt, FILE *fp)
+{
+    char *line = NULL;
+    size_t capacity = 0;
+    ssize_t length;
+
     printf("%s", prompt);
-    char* cmdline = (char*) malloc(sizeof(char) * MAX_LEN);
-    int c, pos = 0;
+    fflush(stdout);
 
-    while ((c = getc(fp)) != EOF) {
-        if (c == '\n') break;
-        cmdline[pos++] = c;
+    length = getline(&line, &capacity, fp);
+    if (length < 0) {
+        free(line);
+        return NULL;
     }
 
-    if (c == EOF && pos == 0) {
-        free(cmdline);
-        return NULL; // Handle Ctrl+D
-    }
-    
-    cmdline[pos] = '\0';
-    return cmdline;
+    if (length > 0 && line[length - 1] == '\n')
+        line[length - 1] = '\0';
+
+    return line;
 }
 
-char** tokenize(char* cmdline) {
-    // Edge case: empty command line
-    if (cmdline == NULL || cmdline[0] == '\0' || cmdline[0] == '\n') {
+char **tokenize(char *cmdline)
+{
+    char **args;
+    char *saveptr = NULL;
+    char *token;
+    int count = 0;
+
+    if (cmdline == NULL)
+        return NULL;
+
+    args = calloc(MAXARGS + 1, sizeof(char *));
+    if (args == NULL) {
+        perror("calloc");
         return NULL;
     }
 
-    char** arglist = (char**)malloc(sizeof(char*) * (MAXARGS + 1));
-    for (int i = 0; i < MAXARGS + 1; i++) {
-        arglist[i] = (char*)malloc(sizeof(char) * ARGLEN);
-        bzero(arglist[i], ARGLEN);
-    }
-
-    char* cp = cmdline;
-    char* start;
-    int len;
-    int argnum = 0;
-
-    while (*cp != '\0' && argnum < MAXARGS) {
-        while (*cp == ' ' || *cp == '\t') cp++; // Skip leading whitespace
-        
-        if (*cp == '\0') break; // Line was only whitespace
-
-        start = cp;
-        len = 1;
-        while (*++cp != '\0' && !(*cp == ' ' || *cp == '\t')) {
-            len++;
+    token = strtok_r(cmdline, " \t", &saveptr);
+    while (token != NULL) {
+        if (count == MAXARGS) {
+            fprintf(stderr, "myshell: too many arguments (maximum %d)\n", MAXARGS);
+            free_args(args);
+            return NULL;
         }
-        strncpy(arglist[argnum], start, len);
-        arglist[argnum][len] = '\0';
-        argnum++;
+
+        args[count] = strdup(token);
+        if (args[count] == NULL) {
+            perror("strdup");
+            free_args(args);
+            return NULL;
+        }
+
+        count++;
+        token = strtok_r(NULL, " \t", &saveptr);
     }
 
-    if (argnum == 0) { // No arguments were parsed
-        for(int i = 0; i < MAXARGS + 1; i++) free(arglist[i]);
-        free(arglist);
+    if (count == 0) {
+        free(args);
         return NULL;
     }
 
-    arglist[argnum] = NULL;
-    return arglist;
+    args[count] = NULL;
+    return args;
+}
+
+void free_args(char **arglist)
+{
+    int i;
+
+    if (arglist == NULL)
+        return;
+
+    for (i = 0; arglist[i] != NULL; i++)
+        free(arglist[i]);
+
+    free(arglist);
 }
