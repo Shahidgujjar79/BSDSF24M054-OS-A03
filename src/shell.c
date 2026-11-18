@@ -1,5 +1,9 @@
 #include "shell.h"
 
+static char *history[HISTORY_SIZE];
+static int history_count;
+static int history_next;
+
 char *read_cmd(const char *prompt, FILE *fp)
 {
     char *line = NULL;
@@ -19,6 +23,47 @@ char *read_cmd(const char *prompt, FILE *fp)
         line[length - 1] = '\0';
 
     return line;
+}
+
+void add_history(const char *command)
+{
+    char *copy = strdup(command);
+
+    if (copy == NULL) {
+        perror("strdup");
+        return;
+    }
+
+    free(history[history_next]);
+    history[history_next] = copy;
+    history_next = (history_next + 1) % HISTORY_SIZE;
+
+    if (history_count < HISTORY_SIZE)
+        history_count++;
+}
+
+void show_history(void)
+{
+    int i;
+    int first = (history_next - history_count + HISTORY_SIZE) % HISTORY_SIZE;
+
+    for (i = 0; i < history_count; i++) {
+        int index = (first + i) % HISTORY_SIZE;
+        printf("%d  %s\n", i + 1, history[index]);
+    }
+}
+
+char *get_history_command(int number)
+{
+    int first;
+    int index;
+
+    if (number < 1 || number > history_count)
+        return NULL;
+
+    first = (history_next - history_count + HISTORY_SIZE) % HISTORY_SIZE;
+    index = (first + number - 1) % HISTORY_SIZE;
+    return history[index];
 }
 
 char **tokenize(char *cmdline)
