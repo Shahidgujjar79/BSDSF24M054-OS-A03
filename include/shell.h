@@ -19,7 +19,7 @@ char **tokenize(char *cmdline);
 void free_args(char **arglist);
 int execute(char **arglist);
 void print_help(void);
-void shell_add_history(const char *command);
+void add_history(const char *command);
 void show_history(void);
 char *get_history_command(int number);
 
